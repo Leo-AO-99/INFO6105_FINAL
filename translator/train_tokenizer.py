@@ -24,7 +24,7 @@ def train_tokenizer(input_file, model_prefix, vocab_size=16000, character_covera
         train_extremely_large_corpus=True,
         shuffle_input_sentence=True,
         max_sentence_length=10000,
-        input_sentence_size=25984574,
+        input_sentence_size=259845,
         # input_sentence_size=10000,
     )
 def main():
