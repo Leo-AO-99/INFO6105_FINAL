@@ -50,7 +50,7 @@ class Tokenizer:
         if eos:
             t = t + [self.tgt_eos_id]
         return t
-    
+   
     def decode_src(self, t: List[int]) -> str:
         """Convert source token IDs back to text."""
         return self.src_sp_model.decode_ids(t)
@@ -68,6 +68,9 @@ class Tokenizer:
         """Convert target text to tokens (subwords)."""
         assert type(text) is str
         return self.tgt_sp_model.encode_as_pieces(text)
+    def switchToTensor():
+        source_Token=SentencePieceProcessor(model_file="source_sp.model")
+        target_tokenizer = SentencePieceProcessor(model_file="target_sp.model")
 
 if __name__ == "__main__":
     tokenizer = Tokenizer(src_model_path='./data/sp/src_sp.model', tgt_model_path='./data/sp/tgt_sp.model')
