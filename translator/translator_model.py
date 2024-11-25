@@ -111,7 +111,7 @@ def PositionEmbedding(seq_len, d,n):
                 P[k, i] = np.sin(k/denominator)
             else:
                 P[k, i] = np.cos(k/denominator)
-    return torch.tensor(P, dtype=torch.float32).unsqueeze(0)  # 添加批量维度
+    return torch.tensor(P, dtype=torch.float32).unsqueeze(0) 
 class Decoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -242,7 +242,6 @@ def test_decoder():
     decoder = Decoder(config)
     encoder=Encoder(config)
 
-    # 模拟输入
     batch_size = config.max_batch_size
     tgt_seq_len = 15
     src_seq_len = 15
@@ -261,5 +260,5 @@ def test_decoder():
     print("Encoder Output Shape:", encoder_output.shape)
     print("Decoder Output Shape:", output.shape)
 
-# 调用测试函数
+
 test_decoder()
