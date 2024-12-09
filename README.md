@@ -19,3 +19,11 @@ translator model based on transformer
 - [ ] train
 - [ ] final code
 - [ ] presentation
+
+# Details
+
+## Add & Norm
+
+- norm first
+
+- RMSNorm
