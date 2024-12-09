@@ -1,4 +1,4 @@
 .vscode
 .DS_Store
-translator/data
+translator/data/*.txt
 __pycache__/
