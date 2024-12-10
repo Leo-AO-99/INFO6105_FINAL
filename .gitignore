@@ -2,3 +2,4 @@
 .DS_Store
 translator/data/*.txt
 __pycache__/
+*.pyc

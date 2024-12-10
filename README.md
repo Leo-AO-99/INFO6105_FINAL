@@ -27,3 +27,7 @@ translator model based on transformer
 - norm first
 
 - RMSNorm
+
+## Loss Function
+
+- CrossEntropyLosss
