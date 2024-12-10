@@ -10,7 +10,6 @@ def PositionEmbedding(seq_len, d, n):
     P = np.zeros((seq_len, d))
     for k in range(seq_len):
         for i in range(d):
-
             denominator = np.power(n, 2 * i / d)
             if i % 2 == 0:
                 P[k, i] = np.sin(k / denominator)
@@ -233,6 +232,9 @@ class Transformer(nn.Module):
         self.decoder = Decoder(config)
         self.output_layer = nn.Linear(self.dim, self.tgt_vocab_size)
         self.softmax = nn.Softmax(dim=-1)
+        
+    def generate_subsequent_mask(self, size):
+        return torch.tril(torch.ones((1, size, size), device=self.device, dtype=torch.bool))
 
     def forward(self, src, tgt):
         """
@@ -242,34 +244,28 @@ class Transformer(nn.Module):
         batch_size = src.size(0)
         
         # padding mask
-        src_padding_mask = (src == self.src_pad_id).unsqueeze(1).unsqueeze(2)
-        tgt_padding_mask = (tgt == self.tgt_pad_id).unsqueeze(1).unsqueeze(2)
+        src_padding_mask = (src == self.src_pad_id).unsqueeze(1).unsqueeze(2).to(self.device)
+        tgt_padding_mask = (tgt == self.tgt_pad_id).unsqueeze(1).unsqueeze(2).to(self.device)
         
         # embedding
-        src_input = self.src_embedding(src)
-        tgt_input = self.tgt_embedding(tgt)
+        src_input = self.src_embedding(src).to(self.device)
+        tgt_input = self.tgt_embedding(tgt).to(self.device)
 
         # positional embedding
         # TODO
         
         # lookahead mask
         tgt_seq_len = self.max_seq_len # we need to set the seq_len to max_seq_len
-        tgt_lookahead_mask = torch.full((tgt_seq_len, tgt_seq_len), float("-inf"))
-        tgt_lookahead_mask = torch.triu(tgt_lookahead_mask, diagonal=1)
-        tgt_lookahead_mask = tgt_lookahead_mask.unsqueeze(0).unsqueeze(0).expand(batch_size, 8, -1, -1).to(self.device) 
-
-        # load to device
-        src_input = src_input.to(self.device)
-        tgt_input = tgt_input.to(self.device)
-        src_padding_mask = src_padding_mask.to(self.device)
-        tgt_padding_mask = tgt_padding_mask.to(self.device)
-        tgt_lookahead_mask = tgt_lookahead_mask.to(self.device)
+        subsequent_mask = self.generate_subsequent_mask(tgt_seq_len)
+        subsequent_mask = subsequent_mask.unsqueeze(1)
+        
+        tgt_lookahead_mask = tgt_padding_mask & (subsequent_mask)
 
         # Encoder output
         encoder_output = self.encoder(src_input, src_padding_mask)
         
         # Decoder output
-        decoder_output = self.decoder(tgt_input, encoder_output, tgt_lookahead_mask, tgt_padding_mask)
+        decoder_output = self.decoder(tgt_input, encoder_output, tgt_lookahead_mask, src_padding_mask)
         
         # output
         output = self.softmax(self.output_layer(decoder_output))
