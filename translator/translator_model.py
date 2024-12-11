@@ -1,14 +1,16 @@
 import torch
+from tqdm import tqdm
 from tokenizer import Tokenizer
 from transformer_model import Transformer
 from config import ModelConfig
 from torch import nn
+import numpy as np
 
 from data import get_dataloader
 
 
 class Translator:
-    def __init__(self):
+    def __init__(self, cpt_name: str = None):
         self.device = (
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
@@ -23,30 +25,25 @@ class Translator:
             self.tokenizer.tgt_pad_id,
             self.device,
         ).to(self.device)
+        self.optim = torch.optim.Adam(self.transformer.parameters(), lr=1e-4)
+        if cpt_name:
+            checkpoint = torch.load(cpt_name)
+            self.transformer.load_state_dict(checkpoint['model_state_dict'])
+            self.optim.load_state_dict(checkpoint['optimizer_state_dict'])
 
     def train(self, num_epochs=10):
-        self.transformer.train()
-        train_dataloader = get_dataloader(
-            "train", self.model_config.max_batch_size, True
-        )
-        optimizer = torch.optim.Adam(self.transformer.parameters(), lr=1e-4)
+        train_loader = get_dataloader("train", self.model_config.max_batch_size, True)
         criterion = nn.CrossEntropyLoss(ignore_index=self.tokenizer.tgt_pad_id)
-        for epoch in range(num_epochs):
-            i = 0
-            total_loss = 0
-            for batch in train_dataloader:
-                i += 1
-                print(f"{epoch}-{i}")
-                src_batch = batch["src"]
-                tgt_batch = batch["tgt"]
-
-                src_tokens = [
-                    self.tokenizer.encode_src(s, False, False) for s in src_batch
-                ]
-                tgt_tokens = [
-                    self.tokenizer.encode_tgt(t, False, False) for t in tgt_batch
-                ]
-
+        for epoch in range(1, num_epochs + 1):
+            self.transformer.train()
+            train_losses = []
+            for i, batch in tqdm(enumerate(train_loader)):
+                src_batch = batch['src']
+                tgt_batch = batch['tgt']
+                
+                src_tokens = [self.tokenizer.encode_src(s, False, False) for s in src_batch]
+                tgt_tokens = [self.tokenizer.encode_tgt(t, False, False) for t in tgt_batch]
+                
                 # Prepare input and target sequences
                 tgt_input = [
                     t[:-1] for t in tgt_tokens
@@ -64,49 +61,31 @@ class Translator:
                 tgt_target = torch.tensor(
                     [self._preprocess_sequence(t) for t in tgt_target]
                 ).to(self.device)
-
-                # # Create masks
-                # src_pad_mask = (src_batch != self.tokenizer.src_pad_id).unsqueeze(1).unsqueeze(2)
-                # tgt_pad_mask = (tgt_input != self.tokenizer.tgt_pad_id).unsqueeze(1).unsqueeze(2)
-                # tgt_seq_len = tgt_input.size(1)
-                # subsequent_mask = torch.tril(torch.ones((1, 1, tgt_seq_len, tgt_seq_len), device=self.device)).bool()
-                # tgt_mask = tgt_pad_mask & subsequent_mask
-
-                # # Forward pass
-                # optimizer.zero_grad()
-                # encoder_output = self.transformer.encoder(src_batch, src_pad_mask)
-                # decoder_output = self.transformer.decoder(tgt_input, encoder_output, tgt_mask, src_pad_mask)
-                # output_logits = self.transformer.output_layer(decoder_output)
-                optimizer.zero_grad()
+                
                 output_logits = self.transformer(src_tokens, tgt_input)
 
-                # Compute loss
-                # Notice that here we are using crossentropy loss. In this case, we cannot add softmax inside the transformer,
-                # since crossentropy requires raw logits
-
+                self.optim.zero_grad()
+                
                 loss = criterion(
                     output_logits.view(-1, self.tokenizer.tgt_vocab_size),
                     tgt_target.contiguous().view(-1),
                 )
-                total_loss += loss.item()
-
-                # Backward pass and optimization
-                loss.backward()
-                optimizer.step()
                 
-                if i % 10 == 0:
+                loss.backward()
+                self.optim.step()
+                
+                train_losses.append(loss.item())
+                del src_tokens, tgt_input, tgt_target, output_logits
+                torch.cuda.empty_cache()
+                
+                if (i + 1) % 2500 == 0:
                     torch.save({
-                        'epoch': epoch,
-                        'loss': total_loss / i,
                         'model_state_dict': self.transformer.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                    }, f'checkpoint_{epoch}_{i}.pth')
-
-            print(f"Epoch {epoch+1}/{num_epochs}, Loss: {loss.item()}")
-
-        # Save the trained model
-        torch.save(self.transformer.state_dict(), "trained_transformer.pth")
-
+                        'optimizer_state_dict': self.optim.state_dict(),
+                        'loss': np.mean(train_losses)
+                    }, f"checkpoint_{epoch}_{i + 1}.pth")
+                
+                
     def _preprocess_sequence(self, sequence):
         if len(sequence) < self.model_config.max_seq_len:
             sequence += [self.tokenizer.src_pad_id] * (

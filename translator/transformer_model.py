@@ -6,16 +6,29 @@ import numpy as np
 from config import ModelConfig
 
 
-def PositionEmbedding(seq_len, d, n):
-    P = np.zeros((seq_len, d))
-    for k in range(seq_len):
-        for i in range(d):
-            denominator = np.power(n, 2 * i / d)
-            if i % 2 == 0:
-                P[k, i] = np.sin(k / denominator)
-            else:
-                P[k, i] = np.cos(k / denominator)
-    return torch.tensor(P, dtype=torch.float32).unsqueeze(0)
+class PositionalEncoder(nn.Module):
+    def __init__(self, config: ModelConfig, device):
+        super().__init__()
+        self.dim = config.dim
+        # Make initial positional encoding matrix with 0
+        pe_matrix= torch.zeros(config.max_seq_len, config.dim) # (L, d_model)
+
+        # Calculating position encoding values
+        for pos in range(config.max_seq_len):
+            for i in range(config.dim):
+                if i % 2 == 0:
+                    pe_matrix[pos, i] = math.sin(pos / (10000 ** (2 * i / config.dim)))
+                elif i % 2 == 1:
+                    pe_matrix[pos, i] = math.cos(pos / (10000 ** (2 * i / config.dim)))
+
+        pe_matrix = pe_matrix.unsqueeze(0) # (1, L, d_model)
+        self.positional_encoding = pe_matrix.to(device=device).requires_grad_(False)
+
+    def forward(self, x):
+        x = x * math.sqrt(self.dim) # (B, L, d_model)
+        x = x + self.positional_encoding # (B, L, d_model)
+
+        return x
 
 
 class RMSNorm(nn.Module):
@@ -223,8 +236,9 @@ class Transformer(nn.Module):
         self.tgt_pad_id = tgt_pad_id
         self.max_seq_len = config.max_seq_len
 
+
         # transformer architecture
-        # transformer architecture
+        self.positional_encoder = PositionalEncoder(config, device)
         self.src_embedding = nn.Embedding(self.src_vocab_size, self.dim)
         self.tgt_embedding = nn.Embedding(self.tgt_vocab_size, self.dim)
 
@@ -252,7 +266,8 @@ class Transformer(nn.Module):
         tgt_input = self.tgt_embedding(tgt).to(self.device)
 
         # positional embedding
-        # TODO
+        src_input = self.positional_encoder(src_input)
+        tgt_input = self.positional_encoder(tgt_input)
         
         # lookahead mask
         tgt_seq_len = self.max_seq_len # we need to set the seq_len to max_seq_len

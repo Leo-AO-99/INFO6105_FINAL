@@ -1,5 +1,6 @@
+import random
 from datasets import load_dataset
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 
 ds = load_dataset("wmt/wmt19", "zh-en")
 
@@ -23,7 +24,14 @@ class TranslationDataset(Dataset):
 
 def get_dataloader(split: str, batch_size: int, shuffle: bool = True):
     dataset = TranslationDataset(split)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    sample_size = int(0.05 * len(dataset))
+    
+
+    sampled_indices = random.sample(range(len(dataset)), sample_size)
+    
+    
+    sampled_dataset = Subset(dataset, sampled_indices)
+    dataloader = DataLoader(sampled_dataset, batch_size=batch_size, shuffle=shuffle)
     return dataloader
 
 if __name__ == "__main__":
