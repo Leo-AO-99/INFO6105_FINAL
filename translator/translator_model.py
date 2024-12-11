@@ -11,6 +11,7 @@ import uuid
 from data import TranslationDatasetV2, get_dataloader, get_dataloader_v2
 
 
+
 class Translator:
     def __init__(self, cpt_name: str = None):
         self.device = (
