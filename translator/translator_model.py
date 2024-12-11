@@ -41,8 +41,8 @@ class Translator:
                 src_batch = batch['src']
                 tgt_batch = batch['tgt']
                 
-                src_tokens = [self.tokenizer.encode_src(s, False, False) for s in src_batch]
-                tgt_tokens = [self.tokenizer.encode_tgt(t, False, False) for t in tgt_batch]
+                src_tokens = [self.tokenizer.encode_src(s, False, True) for s in src_batch]
+                tgt_tokens = [self.tokenizer.encode_tgt(t, True, True) for t in tgt_batch]
                 
                 # Prepare input and target sequences
                 tgt_input = [
