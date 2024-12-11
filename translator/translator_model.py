@@ -106,7 +106,7 @@ class Translator:
             (src_tokens != self.tokenizer.src_pad_id).unsqueeze(1).to(self.device)
         )
         src_tokens = self.transformer.src_embedding(src_tokens)
-        # src_tokens = self.transformer.positional_encoding(src_tokens)
+        src_tokens = self.transformer.positional_encoder(src_tokens)
         e_output = self.transformer.encoder(src_tokens, src_pad_mask)
 
         result_sequence = torch.LongTensor(
@@ -129,7 +129,7 @@ class Translator:
             d_mask = d_mask & nopeak_mask
 
             tgt_tokens = self.transformer.tgt_embedding(result_sequence.unsqueeze(0))
-            # tgt_tokens = self.transformer.positional_encoding(tgt_tokens)
+            tgt_tokens = self.transformer.positional_encoder(tgt_tokens)
             decoder_output = self.transformer.decoder(
                 tgt_tokens, e_output, d_mask, src_pad_mask
             )
