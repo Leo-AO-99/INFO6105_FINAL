@@ -31,3 +31,4 @@ translator model based on transformer
 ## Loss Function
 
 - CrossEntropyLosss
+
