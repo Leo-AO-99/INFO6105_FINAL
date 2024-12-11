@@ -34,6 +34,28 @@ def get_dataloader(split: str, batch_size: int, shuffle: bool = True):
     dataloader = DataLoader(sampled_dataset, batch_size=batch_size, shuffle=shuffle)
     return dataloader
 
+class TranslationDatasetV2(Dataset):
+    def __init__(self, file_path: str):
+        self.data = []
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f.read().splitlines():
+                src, tgt = line.split("&")
+                self.data.append({
+                    "src": src,
+                    "tgt": tgt
+                })
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+def get_dataloader_v2(file_path: str, batch_size: int, shuffle: bool = True):
+    dataset = TranslationDatasetV2(file_path)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    return dataloader
+
 if __name__ == "__main__":
     print(ds)
     loader = get_dataloader("train", 5, True)

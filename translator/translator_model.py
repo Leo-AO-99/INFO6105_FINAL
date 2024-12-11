@@ -5,8 +5,10 @@ from transformer_model import Transformer
 from config import ModelConfig
 from torch import nn
 import numpy as np
+import uuid
 
-from data import get_dataloader
+
+from data import TranslationDatasetV2, get_dataloader, get_dataloader_v2
 
 
 class Translator:
@@ -14,7 +16,7 @@ class Translator:
         self.device = (
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
-        self.tokenizer = Tokenizer("./data/sp/src_sp.model", "./data/sp/tgt_sp.model")
+        self.tokenizer = Tokenizer("./new_data/sp/src_sp.model", "./new_data/sp/tgt_sp.model")
         self.model_config = ModelConfig(
             src_vocab_size=self.tokenizer.src_vocab_size,
             tgt_vocab_size=self.tokenizer.tgt_vocab_size,
@@ -32,12 +34,17 @@ class Translator:
             self.optim.load_state_dict(checkpoint['optimizer_state_dict'])
 
     def train(self, num_epochs=10):
-        train_loader = get_dataloader("train", self.model_config.max_batch_size, True)
+        # train_loader = get_dataloader("train", self.model_config.max_batch_size, False)
+        train_loader = get_dataloader_v2("./new_data/sentence.txt", self.model_config.max_batch_size, True)
         criterion = nn.CrossEntropyLoss(ignore_index=self.tokenizer.tgt_pad_id)
+
+        # Generate a unique identifier for the training session
+        session_id = str(uuid.uuid4())
         for epoch in range(1, num_epochs + 1):
             self.transformer.train()
             train_losses = []
-            for i, batch in tqdm(enumerate(train_loader)):
+            total = len(train_loader)
+            for i, batch in tqdm(enumerate(train_loader), total=total, desc="Processing", unit="item"):
                 src_batch = batch['src']
                 tgt_batch = batch['tgt']
                 
@@ -78,12 +85,11 @@ class Translator:
                 del src_tokens, tgt_input, tgt_target, output_logits
                 torch.cuda.empty_cache()
                 
-                if (i + 1) % 2500 == 0:
-                    torch.save({
-                        'model_state_dict': self.transformer.state_dict(),
-                        'optimizer_state_dict': self.optim.state_dict(),
-                        'loss': np.mean(train_losses)
-                    }, f"checkpoint_{epoch}_{i + 1}.pth")
+            torch.save({
+                'model_state_dict': self.transformer.state_dict(),
+                'optimizer_state_dict': self.optim.state_dict(),
+                'loss': np.mean(train_losses)
+            }, f"checkpoint_{session_id}_{epoch}.pth")
                 
                 
     def _preprocess_sequence(self, sequence):

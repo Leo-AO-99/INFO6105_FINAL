@@ -10,7 +10,7 @@ def extract_text(dataset, src_lang='en', tgt_lang='zh', split='train'):
         tgt_texts.append(item['translation'][tgt_lang])
     return src_texts, tgt_texts
 
-def train_tokenizer(input_file, model_prefix, vocab_size=16000, character_coverage=1.0):
+def train_tokenizer(input_file, model_prefix, vocab_size=4000, character_coverage=1.0):
     SentencePieceTrainer.train(
         input=input_file,
         model_prefix=model_prefix,
@@ -28,27 +28,29 @@ def train_tokenizer(input_file, model_prefix, vocab_size=16000, character_covera
         # input_sentence_size=10000,
     )
 def main():
-    if not os.path.exists('./data/sp'):
-        os.makedirs('./data/sp')
-    src_text_file = './data/src.txt'
-    tgt_text_file = './data/tgt.txt'
-    if not os.path.exists(src_text_file) or not os.path.exists(tgt_text_file):
-        src_texts, tgt_texts = extract_text(ds)
+    if not os.path.exists('./new_data/sp'):
+        os.makedirs('./new_data/sp')
+    src_text_file = './new_data/src.txt'
+    tgt_text_file = './new_data/tgt.txt'
+    # if not os.path.exists(src_text_file) or not os.path.exists(tgt_text_file):
+    #     src_texts, tgt_texts = extract_text(ds)
         
-        with open('./data/src.txt', 'w') as f:
-            for text in src_texts:
-                f.write(text + '\n')
+    #     with open('./data/src.txt', 'w') as f:
+    #         for text in src_texts:
+    #             f.write(text + '\n')
 
-        with open('./data/tgt.txt', 'w') as f:
-            for text in tgt_texts:
-                f.write(text + '\n')
+    #     with open('./data/tgt.txt', 'w') as f:
+    #         for text in tgt_texts:
+    #             f.write(text + '\n')
     train_tokenizer(
         input_file=src_text_file,
-        model_prefix='data/sp/src_sp',
+        model_prefix='new_data/sp/src_sp',
+        vocab_size=5000,
     )
     train_tokenizer(
         input_file=tgt_text_file,
-        model_prefix='data/sp/tgt_sp',
+        model_prefix='new_data/sp/tgt_sp',
+        vocab_size=7000,
     )
 if __name__ == '__main__':
     main()
