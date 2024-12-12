@@ -1,3 +1,5 @@
+from typing import Literal
+import uuid
 import torch
 from tqdm import tqdm
 from tokenizer import Tokenizer
@@ -6,11 +8,11 @@ from config import ModelConfig
 from torch import nn
 import numpy as np
 
-from data import get_dataloader
+from data import get_dataloaderV2
 
 
 class Translator:
-    def __init__(self, cpt_name: str = None):
+    def __init__(self, norm_way: Literal["LN", "RMS"], cpt_name: str = None):
         self.device = (
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
@@ -18,6 +20,7 @@ class Translator:
         self.model_config = ModelConfig(
             src_vocab_size=self.tokenizer.src_vocab_size,
             tgt_vocab_size=self.tokenizer.tgt_vocab_size,
+            norm_way=norm_way,
         )
         self.transformer = Transformer(
             self.model_config,
@@ -25,70 +28,66 @@ class Translator:
             self.tokenizer.tgt_pad_id,
             self.device,
         ).to(self.device)
-        self.optim = torch.optim.Adam(self.transformer.parameters(), lr=1e-4)
+        self.optim = torch.optim.Adam(self.transformer.parameters(), lr=self.model_config.optim_lr)
         if cpt_name:
-            checkpoint = torch.load(cpt_name)
+            checkpoint = torch.load(cpt_name, weights_only=False, map_location=self.device)
             self.transformer.load_state_dict(checkpoint['model_state_dict'])
             self.optim.load_state_dict(checkpoint['optimizer_state_dict'])
 
     def train(self, num_epochs=10):
-        train_loader = get_dataloader("train", self.model_config.max_batch_size, True)
-        criterion = nn.CrossEntropyLoss(ignore_index=self.tokenizer.tgt_pad_id)
+        train_loader = get_dataloaderV2("./data/src.txt", "./data/tgt.txt", self.model_config.max_batch_size, True)
+        criterion = nn.NLLLoss()
+        session_id = uuid.uuid4()
         for epoch in range(1, num_epochs + 1):
             self.transformer.train()
             train_losses = []
-            for i, batch in tqdm(enumerate(train_loader)):
+            total_batches = len(train_loader)
+            for i, batch in tqdm(enumerate(train_loader), desc=f"Epoch {epoch}", unit="batch", total=total_batches):
                 src_batch = batch['src']
                 tgt_batch = batch['tgt']
                 
-                src_tokens = [self.tokenizer.encode_src(s, False, True) for s in src_batch]
-                tgt_tokens = [self.tokenizer.encode_tgt(t, True, True) for t in tgt_batch]
+                src_tokens = [self.tokenizer.encode_src(s, False, True) for s in src_batch] # for transformer input
+                train_src = torch.tensor([self._preprocess_sequence(s, "src") for s in src_tokens]).to(self.device)
                 
-                # Prepare input and target sequences
-                tgt_input = [
-                    t[:-1] for t in tgt_tokens
-                ]  # Exclude the last token of each sequence
-                tgt_target = [
-                    t[1:] for t in tgt_tokens
-                ]  # Exclude the first token of each sequence
+                train_tgt_tokens = [self.tokenizer.encode_tgt(t, True, False) for t in tgt_batch] # for transformer output
+                valid_tgt_tokens = [self.tokenizer.encode_tgt(t, False, True) for t in tgt_batch] # for loss calculation
+                train_tgt = torch.tensor([self._preprocess_sequence(t, "tgt") for t in train_tgt_tokens]).to(self.device)
+                valid_tgt = torch.tensor([self._preprocess_sequence(t, "tgt") for t in valid_tgt_tokens]).to(self.device)
 
-                src_tokens = torch.tensor(
-                    [self._preprocess_sequence(s) for s in src_tokens]
-                ).to(self.device)
-                tgt_input = torch.tensor(
-                    [self._preprocess_sequence(t) for t in tgt_input]
-                ).to(self.device)
-                tgt_target = torch.tensor(
-                    [self._preprocess_sequence(t) for t in tgt_target]
-                ).to(self.device)
-                
-                output_logits = self.transformer(src_tokens, tgt_input)
+                output_logits = self.transformer(train_src, train_tgt)
 
                 self.optim.zero_grad()
-                
                 loss = criterion(
                     output_logits.view(-1, self.tokenizer.tgt_vocab_size),
-                    tgt_target.contiguous().view(-1),
+                    valid_tgt.contiguous().view(valid_tgt.size(0) * valid_tgt.size(1)),
                 )
                 
                 loss.backward()
                 self.optim.step()
                 
                 train_losses.append(loss.item())
-                del src_tokens, tgt_input, tgt_target, output_logits
+                del src_tokens, train_src, train_tgt_tokens, train_tgt, valid_tgt_tokens, valid_tgt, output_logits
                 torch.cuda.empty_cache()
+
+            avg_loss = np.mean(train_losses)
+            print(f"Epoch {epoch}, Average Loss: {avg_loss}")
+            torch.save({
+                'model_state_dict': self.transformer.state_dict(),
+                'optimizer_state_dict': self.optim.state_dict(),
+                'loss': avg_loss
+            }, f"checkpoint_{session_id}_{epoch}_.pth")
                 
-                if (i + 1) % 2500 == 0:
-                    torch.save({
-                        'model_state_dict': self.transformer.state_dict(),
-                        'optimizer_state_dict': self.optim.state_dict(),
-                        'loss': np.mean(train_losses)
-                    }, f"checkpoint_{epoch}_{i + 1}.pth")
                 
-                
-    def _preprocess_sequence(self, sequence):
+    def _preprocess_sequence(self, sequence, sequence_type: Literal["src", "tgt"]):
+        if sequence_type == "src":
+            pad_id = self.tokenizer.src_pad_id
+        elif sequence_type == "tgt":
+            pad_id = self.tokenizer.tgt_pad_id
+        else:
+            raise ValueError(f"Invalid sequence type: {sequence_type}")
+        
         if len(sequence) < self.model_config.max_seq_len:
-            sequence += [self.tokenizer.src_pad_id] * (
+            sequence += [pad_id] * (
                 self.model_config.max_seq_len - len(sequence)
             )
         else:
@@ -98,7 +97,7 @@ class Translator:
     def inference(self, src_sentence: str) -> str:
         src_tokens = self.tokenizer.encode_src(src_sentence, False, False)
         src_tokens = (
-            torch.LongTensor(self._preprocess_sequence(src_tokens))
+            torch.LongTensor(self._preprocess_sequence(src_tokens, 'src'))
             .unsqueeze(0)
             .to(self.device)
         )
@@ -121,12 +120,12 @@ class Translator:
                 .unsqueeze(1)
                 .to(self.device)
             )
-            nopeak_mask = torch.ones(
+            lookahead_mask = torch.ones(
                 [1, self.model_config.max_seq_len, self.model_config.max_seq_len],
                 dtype=torch.bool,
             ).to(self.device)
-            nopeak_mask = torch.tril(nopeak_mask)
-            d_mask = d_mask & nopeak_mask
+            lookahead_mask = torch.tril(lookahead_mask)
+            d_mask = d_mask & lookahead_mask
 
             tgt_tokens = self.transformer.tgt_embedding(result_sequence.unsqueeze(0))
             tgt_tokens = self.transformer.positional_encoder(tgt_tokens)
@@ -151,12 +150,3 @@ class Translator:
         else:
             result_sequence = result_sequence[1:].tolist()
         return self.tokenizer.decode_tgt(result_sequence)
-
-
-if __name__ == "__main__":
-    translator = Translator()
-    translator.train(10)
-    input_sentence = "I am a student"
-
-    # translated_sentence = translator.inference(input_sentence)
-    # print(translated_sentence)
