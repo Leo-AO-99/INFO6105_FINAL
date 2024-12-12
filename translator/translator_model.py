@@ -95,7 +95,7 @@ class Translator:
             sequence = sequence[: self.model_config.max_seq_len]
         return sequence
 
-    def translate(self, src_sentence: str) -> str:
+    def inference(self, src_sentence: str) -> str:
         src_tokens = self.tokenizer.encode_src(src_sentence, False, False)
         src_tokens = (
             torch.LongTensor(self._preprocess_sequence(src_tokens))
@@ -158,5 +158,5 @@ if __name__ == "__main__":
     translator.train(10)
     input_sentence = "I am a student"
 
-    # translated_sentence = translator.translate(input_sentence)
+    # translated_sentence = translator.inference(input_sentence)
     # print(translated_sentence)
