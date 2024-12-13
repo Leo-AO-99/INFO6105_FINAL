@@ -2,32 +2,10 @@
 
 final project for INFO6105
 
-translator model based on transformer
+Translator model based on transformer, English to Chinese.
 
-## to-do
+team members:
 
-- [x] tokenizer
-- [ ] tokenize
-- [x] embedding
-- [ ] RoPE
-- [x] attention
-- [x] norm layer
-- [x] feed forward
-- [x] encoder
-- [ ] decoder
-- [ ] unembedding
-- [ ] train
-- [ ] final code
-- [ ] presentation
+[Harry99125](https://github.com/Harry99125)
 
-# Details
-
-## Add & Norm
-
-- norm first
-
-- RMSNorm
-
-## Loss Function
-
-- CrossEntropyLosss
+[Leo-AO-99](https://github.com/Leo-AO-99)
